@@ -7,7 +7,7 @@ from torch.nn.parameter import Parameter
 
 
 class AutoregressiveLinear(nn.Module):
-    def __init__(self, in_size, out_size, bias=True):
+    def __init__(self, in_size, out_size, bias=True, ):
         super(AutoregressiveLinear, self).__init__()
 
         self.in_size = in_size
@@ -16,7 +16,7 @@ class AutoregressiveLinear(nn.Module):
         self.weight = Parameter(t.Tensor(self.in_size, self.out_size))
 
         if bias:
-            self.bias = Parameter(t.Tensor(self.out_size))
+            self.bias = Parameter(t.Tensor(1, self.out_size))
         else:
             self.register_parameter('bias', None)
 

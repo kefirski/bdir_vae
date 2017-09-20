@@ -105,8 +105,9 @@ class VAE(nn.Module):
         """
 
         [batch_size, _] = input.size()
+        cuda = input.is_cuda
 
-        latent_parameters = []
+        posterior_parameters = []
 
         for i in range(self.vae_length):
             if i < self.vae_length - 1:
@@ -115,6 +116,49 @@ class VAE(nn.Module):
                 parameters = self.inference[i](input)
             acc_size = self.acc_latent_mul[i]
             parameters = [var.unsqueeze(1).repeat(1, acc_size, 1).view(batch_size * acc_size, -1) for var in parameters]
-            latent_parameters.append(parameters)
+            posterior_parameters.append(parameters)
 
-        return None
+        eps = Variable(t.randn(batch_size * self.acc_latent_mul[-1], self.latent_size[-1]))
+        if cuda:
+            eps.cuda()
+
+        z_gauss = eps * posterior_parameters[-1][1] + posterior_parameters[-1][0]
+        z, log_det = self.iaf[-1](z_gauss, posterior_parameters[-1][2])
+
+        kld = VAE.monte_carlo_divergence(n=self.acc_latent_mul[-1],
+                                         z=z,
+                                         z_gauss=z_gauss,
+                                         log_det=log_det,
+                                         posterior=posterior_parameters[-1][:2])
+        print(kld)
+
+    @staticmethod
+    def monte_carlo_divergence(**kwargs):
+        """
+        :param n: number of samples in random variables
+        :param z: z from posterior distribution
+        :param z_gauss: z from diagonal gaussian distribution
+        :param log_det: log det of iaf mapping
+        :param posterior = [mu_1, std_1]: parameters of posterior diagonal gaussian
+        :param prior = [mu_2, std_2] [Optional]: parameters of prior diagonal gaussian
+        :return: kl-divergence approximation
+        """
+        [batch_size, latent_size] = kwargs['posterior'][0].size()
+
+        log_p_z_x = VAE.log_gauss(kwargs['z_gauss'], kwargs['posterior']) - kwargs['log_det']
+
+        if kwargs.get('prior') is None:
+            kwargs['prior'] = [Variable(t.zeros(batch_size, latent_size)),
+                               Variable(t.ones(batch_size, latent_size))]
+        if kwargs['z'].is_cuda:
+            for var in kwargs['prior']:
+                var.cuda()
+        log_p_z = VAE.log_gauss(kwargs['z'], kwargs['prior'])
+
+        result = log_p_z_x - log_p_z
+        return result.view(-1, kwargs['n']).mean(1)
+
+    @staticmethod
+    def log_gauss(z, params):
+        [mu, std] = params
+        return - 0.5 * (t.pow(z - mu, 2) * t.pow(std + 1e-8, -2) + 2 * t.log(std + 1e-8) + log(2 * pi)).sum(1)
