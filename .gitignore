@@ -11,6 +11,7 @@ __pycache__/
 env/
 build/
 develop-eggs/
+.idea/
 dist/
 downloads/
 eggs/
@@ -99,3 +100,6 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# project
+experimentation.py
