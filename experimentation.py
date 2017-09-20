@@ -1,8 +1,15 @@
-from blocks.inference_block import InferenceBlock
+from functools import reduce
+from operator import mul
+from mnist.vae import VAE
+
 import torch as t
+import torch.nn as nn
+from torch.autograd import Variable
+
 
 if __name__ == '__main__':
+    model = VAE()
 
-    x = t.FloatTensor([[1, 2, 3], [4, 5, 6]])
+    input = Variable(t.randn(5, 784))
 
-    print(x.unsqueeze(1).repeat(1, 5, 1).view(-1, 3))
+    model(input)

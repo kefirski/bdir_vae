@@ -28,6 +28,9 @@ class InferenceBlock(nn.Module):
 
         hidden_state = self.input(input)
         posterior = self.posterior(hidden_state)
-        result = self.out(hidden_state) if not self.top_most else None
 
+        if self.top_most:
+            return posterior
+
+        result = self.out(hidden_state) if not self.top_most else None
         return result, posterior

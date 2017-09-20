@@ -8,7 +8,10 @@ class ParametersInference(nn.Module):
         self.mu = nn.Linear(input_size, latent_size)
         self.std = nn.Linear(input_size, latent_size)
 
-        self.h = nn.Linear(input_size, h_size) if h_size is not None else None
+        self.h = nn.Sequential(
+            nn.Linear(input_size, h_size),
+            nn.ELU()
+        ) if h_size is not None else None
 
     def forward(self, input):
         mu = self.mu(input)
