@@ -1,6 +1,8 @@
 from blocks.inference_block import InferenceBlock
+import torch as t
 
 if __name__ == '__main__':
 
-    inf = InferenceBlock(input=10, mu=12, std=13)
-    print(inf.iaf)
+    x = t.FloatTensor([[1, 2, 3], [4, 5, 6]])
+
+    print(x.unsqueeze(1).repeat(1, 5, 1).view(-1, 3))

@@ -6,25 +6,20 @@ from IAF.highway import Highway
 
 
 class IAF(nn.Module):
-    def __init__(self, z_size, h_size):
+    def __init__(self, latent_size, h_size):
         super(IAF, self).__init__()
 
-        self.z_size = z_size
-        self.h_size = h_size
-
-        self.h = Highway(self.h_size, 3, nn.ELU())
+        self.h = Highway(h_size, 3, nn.ELU())
 
         self.m = nn.Sequential(
-            AutoregressiveLinear(self.z_size + self.h_size, 2 * self.z_size, temperature=0),
+            AutoregressiveLinear(latent_size + h_size, 2 * latent_size),
             nn.ELU(),
-            AutoregressiveLinear(2 * self.z_size, self.z_size, temperature=0)
-
+            AutoregressiveLinear(2 * latent_size, latent_size)
         )
         self.s = nn.Sequential(
-            AutoregressiveLinear(self.z_size + self.h_size, 2 * self.z_size, temperature=0),
+            AutoregressiveLinear(latent_size + h_size, 2 * latent_size),
             nn.ELU(),
-            AutoregressiveLinear(2 * self.z_size, self.z_size, temperature=0)
-
+            AutoregressiveLinear(2 * latent_size, latent_size)
         )
 
     def forward(self, z, h):
@@ -39,10 +34,10 @@ class IAF(nn.Module):
         input = t.cat([z, h], 1)
 
         m = self.m(input)
-        s = t.exp(self.s(input))
+        s = self.s(input)
 
-        z = s * z + m
+        z = s.exp() * z + m
 
-        log_det = t.log(s + 1e-12).sum(1)
+        log_det = s.sum(1)
 
         return z, log_det
