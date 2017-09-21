@@ -18,44 +18,43 @@ class GenerativeBlock(nn.Module):
 
         self.top_most = kwargs.get('input') is None
 
-    def inference(self, inference_input):
+    def inference(self, inference_input, repeat, type):
         """
         :param inference_input: An float tensor
-        :return: Posterior parameters
+        :param repeat: An int of number of repeats in order to perform monte-carlo approximation of expectations
+        :return: distribution parameters
         """
 
         assert not self.top_most, 'Generative error. Top most block can not perform inference of posterior'
-        return self.posterior(inference_input)
+        assert type in ['posterior', 'prior']
 
-    def forward(self, inference_input, prior_input, z):
+        [bs, _] = inference_input.size()
+
+        result = self.posterior(inference_input) if type == 'posterior' else self.prior(inference_input)
+        return [var.unsqueeze(1).repeat(1, repeat, 1).view(bs * repeat, -1) if var is not None else None
+                for var in result]
+
+    def forward(self, inference_input):
         """
         :param inference_input: An float tensor with top-down input
-        :param prior_input: An float tensor with input, sampled from prior distribution
-        :param z: An float tensor with latent variable, sampled from posterior distribution
         :return: An float tensor with out of generative function from top-down inference
-                     and sampled variable from prior distribution
         """
 
-        '''
-        This function is necessary to perfrom top-down inference.
-        
-        Given inference and prior input it firsly gets determenistic features.
-        After this, determenistic features of prior variable are used 
-        in order to get parameters of prior distribution.
-        
-        Inference determenistic features are combined with posterior latent variable 
-        and goes through out operation.
-        '''
+        assert self.top_most
+        return self.out(inference_input)
 
-        if self.top_most:
-            return self.out(inference_input)
 
-        else:
-            inference_input = self.input(inference_input)
-            prior_input = self.input(prior_input)
-
-            prior = self.prior(prior_input)
-
-            out = self.out(inference_input, z)
-
-            return out, prior
+        # if self.top_most:
+        #     return self.out(inference_input)
+        #
+        # else:
+        # assert prior_input is not None and z is not None
+        #
+        #     inference_input = self.input(inference_input)
+        #     prior_input = self.input(prior_input)
+        #
+        #     prior = self.prior(prior_input)
+        #
+        #     out = self.out(inference_input, z)
+        #
+        #     return out, prior

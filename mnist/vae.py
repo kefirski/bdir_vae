@@ -1,16 +1,16 @@
-from math import log, pi
 from functools import reduce
+from math import log, pi
 from operator import mul
 
 import torch as t
 import torch.nn as nn
 from torch.autograd import Variable
 
-from mnist.parameters_inference import ParametersInference
-from mnist.generative_out import GenerativeOut
 from IAF.IAF import IAF
-from blocks.inference_block import InferenceBlock
 from blocks.generative_block import GenerativeBlock
+from blocks.inference_block import InferenceBlock
+from mnist.generative_out import GenerativeOut
+from mnist.parameters_inference import ParametersInference
 
 
 class VAE(nn.Module):
@@ -109,40 +109,99 @@ class VAE(nn.Module):
 
         posterior_parameters = []
 
+        '''
+        Here we perform top-down inference.
+        parameters array is filled with posterior parameters [mu, std, h]
+        '''
         for i in range(self.vae_length):
             if i < self.vae_length - 1:
                 input, parameters = self.inference[i](input)
             else:
                 parameters = self.inference[i](input)
             acc_size = self.acc_latent_mul[i]
-            parameters = [var.unsqueeze(1).repeat(1, acc_size, 1).view(batch_size * acc_size, -1) for var in parameters]
+            parameters = [var.unsqueeze(1).repeat(1, acc_size, 1).view(batch_size * acc_size, -1)
+                          for var in parameters]
             posterior_parameters.append(parameters)
 
-        eps = Variable(t.randn(batch_size * self.acc_latent_mul[-1], self.latent_size[-1]))
+        '''
+        Here we perform generation in top-most layer.
+        We will use posterior and prior in layers bellow this.
+        '''
+        prior = Variable(t.randn(*posterior_parameters[-1][0].size()))
         if cuda:
-            eps.cuda()
+            prior.cuda()
 
-        z_gauss = eps * posterior_parameters[-1][1] + posterior_parameters[-1][0]
-        z, log_det = self.iaf[-1](z_gauss, posterior_parameters[-1][2])
+        posterior_gauss = prior * posterior_parameters[-1][1] + posterior_parameters[-1][0]
+        posterior, log_det = self.iaf[-1](posterior_gauss, posterior_parameters[-1][2])
 
         kld = VAE.monte_carlo_divergence(n=self.acc_latent_mul[-1],
-                                         z=z,
-                                         z_gauss=z_gauss,
+                                         z=posterior,
+                                         z_gauss=posterior_gauss,
                                          log_det=log_det,
                                          posterior=posterior_parameters[-1][:2])
-        print(kld)
+
+        posterior = self.generation[-1](posterior)
+        prior = self.generation[-1](prior)
+
+        for i in range(self.vae_length - 2, -1, -1):
+
+            '''
+            Iteration over not top-most generative layers.
+            Firstly we pass input through inputs operation in order to get determenistic features
+            '''
+
+            posterior_determenistic = self.generation[i].input(posterior)
+            prior_determenistic = self.generation[i].input(prior)
+
+            '''
+            Then posterior input goes through inference function in order to get top-down features.
+            Parameters of posterior are combined together and new latent variable is sampled
+            '''
+
+            [top_down_mu, top_down_std, _] = self.generation[i].inference(posterior, self.latent_mul[i], 'posterior')
+            [bottom_up_mu, bottom_up_std, h] = posterior_parameters[i]
+
+            posterior_mu = top_down_mu + bottom_up_mu
+            posterior_std = top_down_std + bottom_up_std
+
+            eps = Variable(t.randn(*posterior_mu.size()))
+            if cuda:
+                eps.cuda()
+
+            posterior_gauss = eps * posterior_std + posterior_mu
+            posterior, log_det = self.iaf[i](posterior_gauss, h)
+
+            '''
+            Prior parameters are obtained from prior operation,
+            then new prior variable is sampled
+            '''
+            prior_mu, prior_std, _ = self.generation[i].inference(prior_determenistic, self.latent_mul[i], 'prior')
+            eps = Variable(t.randn(*prior_mu.size()))
+            if cuda:
+                eps.cuda()
+
+            prior = eps * prior_std + prior_mu
+
+            kld += VAE.monte_carlo_divergence(n=self.acc_latent_mul[i],
+                                              z=posterior,
+                                              z_gauss=posterior_gauss,
+                                              log_det=log_det,
+                                              posterior=[posterior_mu, posterior_std],
+                                              prior=[prior_mu, prior_std])
+
+            posterior = self.generation[i].out(posterior, posterior_determenistic)
+            if i != 0:
+                '''
+                Since there no level below bottom-most, 
+                there no reason to pass prior through out operation
+                '''
+                prior = self.generation[i].out(prior, prior_determenistic)
+
+        return posterior
 
     @staticmethod
     def monte_carlo_divergence(**kwargs):
-        """
-        :param n: number of samples in random variables
-        :param z: z from posterior distribution
-        :param z_gauss: z from diagonal gaussian distribution
-        :param log_det: log det of iaf mapping
-        :param posterior = [mu_1, std_1]: parameters of posterior diagonal gaussian
-        :param prior = [mu_2, std_2] [Optional]: parameters of prior diagonal gaussian
-        :return: kl-divergence approximation
-        """
+
         [batch_size, latent_size] = kwargs['posterior'][0].size()
 
         log_p_z_x = VAE.log_gauss(kwargs['z_gauss'], kwargs['posterior']) - kwargs['log_det']
