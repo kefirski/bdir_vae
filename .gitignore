@@ -17,6 +17,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+/prior_sampling
 lib64/
 parts/
 sdist/
