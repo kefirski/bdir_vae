@@ -30,12 +30,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='CDVAE')
     parser.add_argument('--num-epochs', type=int, default=3, metavar='NI',
                         help='num epochs (default: 3)')
-    parser.add_argument('--batch-size', type=int, default=15, metavar='BS',
-                        help='batch size (default: 15)')
+    parser.add_argument('--batch-size', type=int, default=30, metavar='BS',
+                        help='batch size (default: 30)')
     parser.add_argument('--use-cuda', type=bool, default=False, metavar='CUDA',
                         help='use cuda (default: False)')
-    parser.add_argument('--learning-rate', type=float, default=0.002, metavar='LR',
-                        help='learning rate (default: 0.002)')
+    parser.add_argument('--learning-rate', type=float, default=0.001, metavar='LR',
+                        help='learning rate (default: 0.001)')
     parser.add_argument('--save', type=str, default='trained_model', metavar='TS',
                         help='path where save trained model to (default: "trained_model")')
     args = parser.parse_args()
@@ -59,8 +59,6 @@ if __name__ == "__main__":
     if args.use_cuda:
         z = [var.cuda() for var in z]
 
-    repeats = vae.acc_latent_mul[0]
-
     for epoch in range(args.num_epochs):
         for iteration, (input, _) in enumerate(dataloader):
 
@@ -71,10 +69,11 @@ if __name__ == "__main__":
             optimizer.zero_grad()
 
             out, kld = vae(input)
-            input = input.unsqueeze(1).repeat(1, repeats, 1, 1, 1).view(-1, 1, 28, 28)
 
-            likelihood = likelihood_function(out.view(-1, 1, 28, 28), input) / (args.batch_size * repeats)
-            # print(likelihood, kld.mean())
+            input = input.view(-1, 1, 28, 28)
+            out = out.view(-1, 1, 28, 28)
+
+            likelihood = likelihood_function(out, input) / args.batch_size
             loss = likelihood + kld.mean()
 
             loss.backward()

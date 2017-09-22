@@ -15,7 +15,7 @@ class ParametersInference(nn.Module):
 
     def forward(self, input):
         mu = self.mu(input)
-        std = self.std(input).exp()
+        std = (0.5 * self.std(input)).exp()
         h = self.h(input) if self.h is not None else None
 
         return mu, std, h

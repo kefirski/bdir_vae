@@ -18,21 +18,16 @@ class GenerativeBlock(nn.Module):
 
         self.top_most = kwargs.get('input') is None
 
-    def inference(self, inference_input, repeat, type):
+    def inference(self, inference_input, type):
         """
         :param inference_input: An float tensor
-        :param repeat: An int of number of repeats in order to perform monte-carlo approximation of expectations
         :return: distribution parameters
         """
 
         assert not self.top_most, 'Generative error. Top most block can not perform inference of posterior'
         assert type in ['posterior', 'prior']
 
-        [bs, _] = inference_input.size()
-
-        result = self.posterior(inference_input) if type == 'posterior' else self.prior(inference_input)
-        return [var.unsqueeze(1).repeat(1, repeat, 1).view(bs * repeat, -1) if var is not None else None
-                for var in result]
+        return self.posterior(inference_input) if type == 'posterior' else self.prior(inference_input)
 
     def forward(self, inference_input):
         """
