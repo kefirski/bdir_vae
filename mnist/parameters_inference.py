@@ -10,7 +10,7 @@ class ParametersInference(nn.Module):
 
         self.h = nn.Sequential(
             nn.Linear(input_size, h_size),
-            nn.ELU()
+            nn.SELU()
         ) if h_size is not None else None
 
     def forward(self, input):

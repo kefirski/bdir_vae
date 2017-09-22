@@ -22,34 +22,29 @@ class VAE(nn.Module):
                 InferenceBlock(
                     input=nn.Sequential(
                         nn.Linear(784, 1500),
-                        nn.ELU()
+                        nn.SELU()
                     ),
-                    posterior=ParametersInference(1500, latent_size=140, h_size=400),
+                    posterior=ParametersInference(1500, latent_size=100, h_size=100),
                     out=nn.Sequential(
-                        nn.Linear(1500, 1200),
-                        nn.ELU(),
-                        nn.Linear(1200, 900),
-                        nn.ELU()
+                        nn.Linear(1500, 900),
+                        nn.SELU()
                     )
                 ),
-
                 InferenceBlock(
                     input=nn.Sequential(
-                        nn.Linear(900, 500),
-                        nn.ELU(),
-                        nn.Linear(500, 300),
-                        nn.ELU(),
-                        nn.Linear(300, 100),
-                        nn.ELU()
+                        nn.Linear(900, 400),
+                        nn.SELU(),
+                        nn.Linear(400, 200),
+                        nn.SELU(),
                     ),
-                    posterior=ParametersInference(100, latent_size=30, h_size=50)
+                    posterior=ParametersInference(200, latent_size=30, h_size=50)
                 )
             ]
         )
 
         self.iaf = nn.ModuleList(
             [
-                IAF(latent_size=140, h_size=400),
+                IAF(latent_size=100, h_size=100),
                 IAF(latent_size=30, h_size=50)
             ]
         )
@@ -57,40 +52,41 @@ class VAE(nn.Module):
         self.generation = nn.ModuleList(
             [
                 GenerativeBlock(
+                    posterior=ParametersInference(100, latent_size=100),
+                    input=nn.Sequential(
+                        nn.Linear(100, 100),
+                        nn.SELU()
+                    ),
+                    prior=ParametersInference(100, latent_size=100),
                     out=GenerativeOut(nn.Sequential(
-                        nn.Linear(140 + 120, 300),
-                        nn.ELU(),
+                        nn.Linear(100 + 100, 300),
+                        nn.SELU(),
                         nn.Linear(300, 400),
-                        nn.ELU(),
+                        nn.SELU(),
                         nn.Linear(400, 600),
-                        nn.ELU(),
+                        nn.SELU(),
                         nn.Linear(600, 784),
                     )),
-                    posterior=ParametersInference(90, latent_size=140),
-                    input=nn.Sequential(
-                        nn.Linear(90, 120),
-                        nn.ELU()
-                    ),
-                    prior=ParametersInference(120, latent_size=140)
 
                 ),
-
                 GenerativeBlock(
                     out=nn.Sequential(
-                        nn.Linear(30, 90),
-                        nn.ELU()
+                        nn.Linear(30, 80),
+                        nn.SELU(),
+                        nn.Linear(80, 100),
+                        nn.SELU()
                     )
                 )
             ]
         )
 
-        self.latent_size = [140, 30]
+        self.latent_size = [100, 30]
 
         '''
         In order to approximate kl-divergence 
         it is necessary to sample latent_mul[i] number of latent variables at i-th layer of network
         '''
-        self.latent_mul = [5, 5]
+        self.latent_mul = [3, 3]
         self.acc_latent_mul = [reduce(mul, self.latent_mul[::-1][0:i + 1], 1)
                                for i, _ in enumerate(self.latent_mul)][::-1]
 
@@ -127,18 +123,20 @@ class VAE(nn.Module):
         Here we perform generation in top-most layer.
         We will use posterior and prior in layers bellow this.
         '''
-        prior = Variable(t.randn(*posterior_parameters[-1][0].size()))
+        [mu, std, h] = posterior_parameters[-1]
+
+        prior = Variable(t.randn(*mu.size()))
         if cuda:
             prior.cuda()
 
-        posterior_gauss = prior * posterior_parameters[-1][1] + posterior_parameters[-1][0]
-        posterior, log_det = self.iaf[-1](posterior_gauss, posterior_parameters[-1][2])
+        posterior_gauss = prior * std + mu
+        posterior, log_det = self.iaf[-1](posterior_gauss, h)
 
         kld = VAE.monte_carlo_divergence(n=self.acc_latent_mul[-1],
                                          z=posterior,
                                          z_gauss=posterior_gauss,
                                          log_det=log_det,
-                                         posterior=posterior_parameters[-1][:2])
+                                         posterior=[mu, std])
 
         posterior = self.generation[-1](posterior)
         prior = self.generation[-1](prior)
@@ -157,7 +155,6 @@ class VAE(nn.Module):
             Then posterior input goes through inference function in order to get top-down features.
             Parameters of posterior are combined together and new latent variable is sampled
             '''
-
             [top_down_mu, top_down_std, _] = self.generation[i].inference(posterior, self.latent_mul[i], 'posterior')
             [bottom_up_mu, bottom_up_std, h] = posterior_parameters[i]
 
@@ -176,11 +173,6 @@ class VAE(nn.Module):
             then new prior variable is sampled
             '''
             prior_mu, prior_std, _ = self.generation[i].inference(prior_determenistic, self.latent_mul[i], 'prior')
-            eps = Variable(t.randn(*prior_mu.size()))
-            if cuda:
-                eps.cuda()
-
-            prior = eps * prior_std + prior_mu
 
             kld += VAE.monte_carlo_divergence(n=self.acc_latent_mul[i],
                                               z=posterior,
@@ -195,9 +187,35 @@ class VAE(nn.Module):
                 Since there no level below bottom-most, 
                 there no reason to pass prior through out operation
                 '''
+
+                eps = Variable(t.randn(*prior_mu.size()))
+                if cuda:
+                    eps.cuda()
+
+                prior = eps * prior_std + prior_mu
+
                 prior = self.generation[i].out(prior, prior_determenistic)
 
-        return posterior
+        return posterior, kld
+
+    def sample(self, z):
+        """
+        :param z: An array of variables from normal distribution each with shape of [batch_size, latent_size[i]]
+        :return: Sample from generative model with shape of [batch_size, 784]
+        """
+
+        top_variable = z[-1]
+
+        out = self.generation[-1].out(top_variable)
+
+        for i in range(self.vae_length - 2, -1, -1):
+            determenistic = self.generation[i].input(out)
+
+            [mu, std, _] = self.generation[i].prior(determenistic)
+            prior = z[i] * std + mu
+            out = self.generation[i].out(prior, determenistic)
+
+        return out
 
     @staticmethod
     def monte_carlo_divergence(**kwargs):

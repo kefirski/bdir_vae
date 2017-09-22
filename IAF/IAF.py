@@ -9,17 +9,22 @@ class IAF(nn.Module):
     def __init__(self, latent_size, h_size):
         super(IAF, self).__init__()
 
-        self.h = Highway(h_size, 3, nn.ELU())
+        self.z_size = latent_size
+        self.h_size = h_size
+
+        self.h = Highway(self.h_size, 3, nn.ELU())
 
         self.m = nn.Sequential(
-            AutoregressiveLinear(latent_size + h_size, 2 * latent_size),
+            AutoregressiveLinear(self.z_size + self.h_size, 2 * self.z_size, temperature=0),
             nn.ELU(),
-            AutoregressiveLinear(2 * latent_size, latent_size)
+            AutoregressiveLinear(2 * self.z_size, self.z_size, temperature=0)
+
         )
         self.s = nn.Sequential(
-            AutoregressiveLinear(latent_size + h_size, 2 * latent_size),
+            AutoregressiveLinear(self.z_size + self.h_size, 2 * self.z_size, temperature=0),
             nn.ELU(),
-            AutoregressiveLinear(2 * latent_size, latent_size)
+            AutoregressiveLinear(2 * self.z_size, self.z_size, temperature=0)
+
         )
 
     def forward(self, z, h):

@@ -7,7 +7,7 @@ from torch.nn.parameter import Parameter
 
 
 class AutoregressiveLinear(nn.Module):
-    def __init__(self, in_size, out_size, bias=True):
+    def __init__(self, in_size, out_size, temperature=0, bias=True, ):
         super(AutoregressiveLinear, self).__init__()
 
         self.in_size = in_size
@@ -20,12 +20,13 @@ class AutoregressiveLinear(nn.Module):
         else:
             self.register_parameter('bias', None)
 
-        self.reset_parameters()
+        self.reset_parameters(temperature)
 
-    def reset_parameters(self):
+    def reset_parameters(self, temperature):
         stdv = 1. / math.sqrt(self.out_size)
 
         self.weight = xavier_normal(self.weight)
+        self.weight = Parameter(self.weight.data.add_(temperature))
 
         if self.bias is not None:
             self.bias.data.uniform_(-stdv, stdv)

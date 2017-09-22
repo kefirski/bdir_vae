@@ -42,19 +42,3 @@ class GenerativeBlock(nn.Module):
 
         assert self.top_most
         return self.out(inference_input)
-
-
-        # if self.top_most:
-        #     return self.out(inference_input)
-        #
-        # else:
-        # assert prior_input is not None and z is not None
-        #
-        #     inference_input = self.input(inference_input)
-        #     prior_input = self.input(prior_input)
-        #
-        #     prior = self.prior(prior_input)
-        #
-        #     out = self.out(inference_input, z)
-        #
-        #     return out, prior

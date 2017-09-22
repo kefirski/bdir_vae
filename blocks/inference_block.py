@@ -27,10 +27,10 @@ class InferenceBlock(nn.Module):
         """
 
         hidden_state = self.input(input)
-        posterior = self.posterior(hidden_state)
+        posterior_parameters = self.posterior(hidden_state)
 
         if self.top_most:
-            return posterior
+            return posterior_parameters
 
         result = self.out(hidden_state) if not self.top_most else None
-        return result, posterior
+        return result, posterior_parameters
