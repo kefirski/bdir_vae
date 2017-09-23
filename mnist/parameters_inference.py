@@ -5,11 +5,11 @@ class ParametersInference(nn.Module):
     def __init__(self, input_size, latent_size, h_size=None):
         super(ParametersInference, self).__init__()
 
-        self.mu = nn.Linear(input_size, latent_size)
-        self.std = nn.Linear(input_size, latent_size)
+        self.mu = nn.utils.weight_norm(nn.Linear(input_size, latent_size))
+        self.std = nn.utils.weight_norm(nn.Linear(input_size, latent_size))
 
         self.h = nn.Sequential(
-            nn.Linear(input_size, h_size),
+            nn.utils.weight_norm(nn.Linear(input_size, h_size)),
             nn.SELU()
         ) if h_size is not None else None
 

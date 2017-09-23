@@ -19,20 +19,20 @@ class VAE(nn.Module):
             [
                 InferenceBlock(
                     input=nn.Sequential(
-                        nn.Linear(784, 1500),
+                        nn.utils.weight_norm(nn.Linear(784, 1500)),
                         nn.ELU()
                     ),
                     posterior=ParametersInference(1500, latent_size=100, h_size=100),
                     out=nn.Sequential(
-                        nn.Linear(1500, 900),
+                        nn.utils.weight_norm(nn.Linear(1500, 900)),
                         nn.SELU()
                     )
                 ),
                 InferenceBlock(
                     input=nn.Sequential(
-                        nn.Linear(900, 400),
+                        nn.utils.weight_norm(nn.Linear(900, 400)),
                         nn.ELU(),
-                        nn.Linear(400, 200),
+                        nn.utils.weight_norm(nn.Linear(400, 200)),
                         nn.ELU(),
                     ),
                     posterior=ParametersInference(200, latent_size=30, h_size=50)
@@ -52,26 +52,26 @@ class VAE(nn.Module):
                 GenerativeBlock(
                     posterior=ParametersInference(100, latent_size=100),
                     input=nn.Sequential(
-                        nn.Linear(100, 100),
+                        nn.utils.weight_norm(nn.Linear(100, 100)),
                         nn.SELU()
                     ),
                     prior=ParametersInference(100, latent_size=100),
                     out=GenerativeOut(nn.Sequential(
-                        nn.Linear(100 + 100, 300),
+                        nn.utils.weight_norm(nn.Linear(100 + 100, 300)),
                         nn.SELU(),
-                        nn.Linear(300, 400),
+                        nn.utils.weight_norm(nn.Linear(300, 400)),
                         nn.SELU(),
-                        nn.Linear(400, 600),
+                        nn.utils.weight_norm(nn.Linear(400, 600)),
                         nn.SELU(),
-                        nn.Linear(600, 784),
+                        nn.utils.weight_norm(nn.Linear(600, 784)),
                     )),
 
                 ),
                 GenerativeBlock(
                     out=nn.Sequential(
-                        nn.Linear(30, 80),
+                        nn.utils.weight_norm(nn.Linear(30, 80)),
                         nn.SELU(),
-                        nn.Linear(80, 100),
+                        nn.utils.weight_norm(nn.Linear(80, 100)),
                         nn.SELU()
                     )
                 )
@@ -82,8 +82,6 @@ class VAE(nn.Module):
 
         assert len(self.inference) == len(self.generation) == len(self.iaf)
         self.vae_length = len(self.inference)
-
-        self.number_of_sampling = [2, 2]
 
     def forward(self, input):
         """
@@ -109,8 +107,6 @@ class VAE(nn.Module):
             else:
                 parameters = self.inference[i](input)
 
-            parameters = [VAE.repeat(var, self.number_of_sampling[i], batch_size) for var in parameters]
-
             posterior_parameters.append(parameters)
 
         '''
@@ -120,12 +116,10 @@ class VAE(nn.Module):
         [mu, std, h] = posterior_parameters[-1]
 
         prior = Variable(t.randn(*mu.size()))
-        if cuda:
-            prior.cuda()
-
         eps = Variable(t.randn(*mu.size()))
+
         if cuda:
-            eps.cuda()
+            prior, eps = prior.cuda(), eps.cuda()
 
         posterior_gauss = eps * std + mu
         posterior, log_det = self.iaf[-1](posterior_gauss, h)
@@ -133,12 +127,7 @@ class VAE(nn.Module):
         kld = VAE.monte_carlo_divergence(z=posterior,
                                          z_gauss=posterior_gauss,
                                          log_det=log_det,
-                                         posterior=[mu, std],
-                                         n=self.number_of_sampling[-1])
-        kld = t.max(t.stack([kld.mean(), Variable(t.FloatTensor([1]))]), 0)[0]
-
-        posterior = VAE.unrepeat(posterior, self.number_of_sampling[-1], batch_size)
-        prior = VAE.unrepeat(prior, self.number_of_sampling[-1], batch_size)
+                                         posterior=[mu, std])
 
         posterior = self.generation[-1](posterior)
         prior = self.generation[-1](prior)
@@ -157,8 +146,6 @@ class VAE(nn.Module):
             Parameters of posterior are combined together and new latent variable is sampled
             '''
             [top_down_mu, top_down_std, _] = self.generation[i].inference(posterior, 'posterior')
-            [top_down_mu, top_down_std] = [VAE.repeat(var, self.number_of_sampling[i], batch_size)
-                                           for var in [top_down_mu, top_down_std]]
             [bottom_up_mu, bottom_up_std, h] = posterior_parameters[i]
 
             posterior_mu = top_down_mu + bottom_up_mu
@@ -176,22 +163,15 @@ class VAE(nn.Module):
             then new prior variable is sampled
             '''
             prior_mu, prior_std, _ = self.generation[i].inference(prior_determenistic, 'prior')
-            [prior_mu, prior_std] = [VAE.repeat(var, self.number_of_sampling[i], batch_size)
-                                     for var in [prior_mu, prior_std]]
 
-            _kld = VAE.monte_carlo_divergence(z=posterior,
+            kld += VAE.monte_carlo_divergence(z=posterior,
                                               z_gauss=posterior_gauss,
                                               log_det=log_det,
                                               posterior=[posterior_mu, posterior_std],
-                                              prior=[prior_mu, prior_std],
-                                              n=self.number_of_sampling[i])
-            _kld = t.max(t.stack([_kld.mean(), Variable(t.FloatTensor([1]))]), 0)[0]
-            kld += _kld
+                                              prior=[prior_mu, prior_std])
 
-            posterior_determenistic = VAE.repeat(posterior_determenistic, self.number_of_sampling[i], batch_size)
             posterior = self.generation[i].out(posterior, posterior_determenistic)
 
-            posterior = VAE.unrepeat(posterior, self.number_of_sampling[i], batch_size)
             if i != 0:
                 '''
                 Since there no level below bottom-most, 
@@ -204,9 +184,7 @@ class VAE(nn.Module):
 
                 prior = eps * prior_std + prior_mu
 
-                prior_determenistic = VAE.repeat(prior_determenistic, self.number_of_sampling[i], batch_size)
                 prior = self.generation[i].out(prior, prior_determenistic)
-                prior = VAE.unrepeat(prior, self.number_of_sampling[i], batch_size)
 
         return posterior, kld
 
@@ -237,22 +215,19 @@ class VAE(nn.Module):
         if kwargs.get('prior') is None:
             kwargs['prior'] = [Variable(t.zeros(*kwargs['z'].size())),
                                Variable(t.ones(*kwargs['z'].size()))]
+
+        one = Variable(t.FloatTensor([1]))
+
         if kwargs['z'].is_cuda:
+            one = one.cuda()
             for var in kwargs['prior']:
                 var.cuda()
         log_p_z = VAE.log_gauss(kwargs['z'], kwargs['prior'])
 
-        return log_p_z_x - log_p_z
+        result = log_p_z_x - log_p_z
+        return t.max(t.stack([result.mean(), one]), 0)[0]
 
     @staticmethod
     def log_gauss(z, params):
         [mu, std] = params
         return - 0.5 * (t.pow(z - mu, 2) * t.pow(std + 1e-8, -2) + 2 * t.log(std + 1e-8) + log(2 * pi)).sum(1)
-
-    @staticmethod
-    def repeat(input, n, batch_size):
-        return input.unsqueeze(1).repeat(1, n, 1).view(batch_size * n, -1)
-
-    @staticmethod
-    def unrepeat(input, n, batch_size):
-        return input.view(batch_size, n, -1)[:, 0, :]

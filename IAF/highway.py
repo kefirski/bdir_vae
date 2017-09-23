@@ -8,9 +8,9 @@ class Highway(nn.Module):
 
         self.num_layers = num_layers
 
-        self.nonlinear = nn.ModuleList([nn.Linear(size, size) for _ in range(num_layers)])
-        self.linear = nn.ModuleList([nn.Linear(size, size) for _ in range(num_layers)])
-        self.gate = nn.ModuleList([nn.Linear(size, size) for _ in range(num_layers)])
+        self.nonlinear = nn.ModuleList([nn.utils.weight_norm(nn.Linear(size, size)) for _ in range(num_layers)])
+        self.linear = nn.ModuleList([nn.utils.weight_norm(nn.Linear(size, size)) for _ in range(num_layers)])
+        self.gate = nn.ModuleList([nn.utils.weight_norm(nn.Linear(size, size)) for _ in range(num_layers)])
 
         self.f = f
 
