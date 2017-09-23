@@ -1,5 +1,6 @@
 import torch as t
 import torch.nn as nn
+import torch.nn.functional as F
 
 from IAF.autoregressive_linear import AutoregressiveLinear
 from IAF.highway import Highway
@@ -12,20 +13,19 @@ class IAF(nn.Module):
         self.z_size = latent_size
         self.h_size = h_size
 
-        self.h = Highway(self.h_size, 3, nn.ELU())
-
-        self.m = nn.Sequential(
-            AutoregressiveLinear(self.z_size + self.h_size, 2 * self.z_size, temperature=0),
-            nn.ELU(),
-            AutoregressiveLinear(2 * self.z_size, self.z_size, temperature=0)
-
+        self.h = nn.Sequential(
+            Highway(self.h_size, 3, nn.ELU()),
+            nn.Linear(self.h_size, self.z_size * self.z_size)
         )
-        self.s = nn.Sequential(
-            AutoregressiveLinear(self.z_size + self.h_size, 2 * self.z_size, temperature=0),
-            nn.ELU(),
-            AutoregressiveLinear(2 * self.z_size, self.z_size, temperature=0)
 
-        )
+        self.m = nn.ModuleList([
+            AutoregressiveLinear(self.z_size),
+            AutoregressiveLinear(self.z_size)
+        ])
+        self.s = nn.ModuleList([
+            AutoregressiveLinear(self.z_size),
+            AutoregressiveLinear(self.z_size)
+        ])
 
     def forward(self, z, h):
         """
@@ -35,11 +35,19 @@ class IAF(nn.Module):
         """
 
         h = self.h(h)
+        h = h.view(-1, self.z_size, self.z_size)
 
-        input = t.cat([z, h], 1)
+        m = z
+        for i, layer in enumerate(self.m):
+            m = layer(m, h)
+            if i != len(self.m) - 1:
+                m = F.elu(m)
 
-        m = self.m(input)
-        s = self.s(input)
+        s = z
+        for i, layer in enumerate(self.s):
+            s = layer(s, h)
+            if i != len(self.s) - 1:
+                s = F.elu(s)
 
         z = s.exp() * z + m
 
