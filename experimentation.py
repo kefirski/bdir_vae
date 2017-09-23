@@ -9,7 +9,10 @@ from torch.autograd import Variable
 
 if __name__ == '__main__':
 
-    model = VAE()
-    # input = Variable(t.randn(5, 784))
+    # model = VAE()
+    input = Variable(t.randn(5, 784)).max()
+    print(input)
+    # if not input > 12:
+        # print('test')
     # model(input)
-    print([par.size() for par in model.parameters()])
+    # print([par.size() for par in model.parameters()])

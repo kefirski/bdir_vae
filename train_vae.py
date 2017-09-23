@@ -74,7 +74,8 @@ if __name__ == "__main__":
             out = out.view(-1, 1, 28, 28)
 
             likelihood = likelihood_function(out, input) / args.batch_size
-            loss = likelihood + kld.mean()
+            kld = t.stack([kld.mean(), Variable(t.FloatTensor([2]))]).max()
+            loss = likelihood + kld
 
             loss.backward()
             optimizer.step()

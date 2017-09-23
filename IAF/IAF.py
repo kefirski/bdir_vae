@@ -1,4 +1,3 @@
-import torch as t
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -37,20 +36,21 @@ class IAF(nn.Module):
         h = self.h(h)
         h = h.view(-1, self.z_size, self.z_size)
 
-        m = z
-        for i, layer in enumerate(self.m):
-            m = layer(m, h)
-            if i != len(self.m) - 1:
-                m = F.elu(m)
-
-        s = z
-        for i, layer in enumerate(self.s):
-            s = layer(s, h)
-            if i != len(self.s) - 1:
-                s = F.elu(s)
+        m = IAF.unroll_autogressive_network(z, self.m, h)
+        s = IAF.unroll_autogressive_network(z, self.s, h)
 
         z = s.exp() * z + m
 
         log_det = s.sum(1)
 
         return z, log_det
+
+    @staticmethod
+    def unroll_autogressive_network(input, layers, h):
+
+        for i, layer in enumerate(layers):
+            input = layer(input, h)
+            if i != len(layers) - 1:
+                input = F.elu(input)
+
+        return input
