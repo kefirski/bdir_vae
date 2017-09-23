@@ -18,6 +18,7 @@ eggs/
 .eggs/
 lib/
 /prior_sampling
+trained_model
 lib64/
 parts/
 sdist/
