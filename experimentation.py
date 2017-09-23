@@ -10,8 +10,9 @@ from torch.autograd import Variable
 if __name__ == '__main__':
 
     # model = VAE()
-    input = Variable(t.randn(5, 784)).max()
-    print(input)
+    x = Variable(t.FloatTensor([1]))
+    y = Variable(t.FloatTensor([2]))
+    print(t.max(t.stack([x, y])), 0)
     # if not input > 12:
         # print('test')
     # model(input)

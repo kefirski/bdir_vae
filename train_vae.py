@@ -28,14 +28,14 @@ if __name__ == "__main__":
         os.mkdir('prior_sampling')
 
     parser = argparse.ArgumentParser(description='CDVAE')
-    parser.add_argument('--num-epochs', type=int, default=3, metavar='NI',
-                        help='num epochs (default: 3)')
-    parser.add_argument('--batch-size', type=int, default=30, metavar='BS',
-                        help='batch size (default: 30)')
+    parser.add_argument('--num-epochs', type=int, default=6, metavar='NI',
+                        help='num epochs (default: 6)')
+    parser.add_argument('--batch-size', type=int, default=20, metavar='BS',
+                        help='batch size (default: 10)')
     parser.add_argument('--use-cuda', type=bool, default=False, metavar='CUDA',
                         help='use cuda (default: False)')
     parser.add_argument('--learning-rate', type=float, default=0.001, metavar='LR',
-                        help='learning rate (default: 0.001)')
+                        help='learning rate (default: 0.0005)')
     parser.add_argument('--save', type=str, default='trained_model', metavar='TS',
                         help='path where save trained model to (default: "trained_model")')
     args = parser.parse_args()
@@ -71,10 +71,11 @@ if __name__ == "__main__":
             out, kld = vae(input)
 
             input = input.view(-1, 1, 28, 28)
-            out = out.view(-1, 1, 28, 28)
+            out = out.contiguous().view(-1, 1, 28, 28)
 
             likelihood = likelihood_function(out, input) / args.batch_size
-            kld = t.stack([kld.mean(), Variable(t.FloatTensor([2]))]).max()
+            # kld = t.max(t.stack([kld.mean(), Variable(t.FloatTensor([2]))]), 0)[0]
+            print(likelihood, kld)
             loss = likelihood + kld
 
             loss.backward()
