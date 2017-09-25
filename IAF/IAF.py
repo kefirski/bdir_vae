@@ -15,23 +15,26 @@ class IAF(nn.Module):
         self.h = Highway(self.h_size, 3, nn.ELU())
 
         self.m = nn.Sequential(
-            AutoregressiveLinear(self.z_size + self.h_size, 2 * self.z_size, temperature=0),
+            AutoregressiveLinear(self.z_size + self.h_size, self.z_size),
             nn.ELU(),
-            AutoregressiveLinear(2 * self.z_size, self.z_size, temperature=0)
-
+            AutoregressiveLinear(self.z_size, self.z_size),
+            nn.ELU(),
+            AutoregressiveLinear(self.z_size, self.z_size)
         )
-        self.s = nn.Sequential(
-            AutoregressiveLinear(self.z_size + self.h_size, 2 * self.z_size, temperature=0),
-            nn.ELU(),
-            AutoregressiveLinear(2 * self.z_size, self.z_size, temperature=0)
 
+        self.s = nn.Sequential(
+            AutoregressiveLinear(self.z_size + self.h_size, self.z_size),
+            nn.ELU(),
+            AutoregressiveLinear(self.z_size, self.z_size),
+            nn.ELU(),
+            AutoregressiveLinear(self.z_size, self.z_size)
         )
 
     def forward(self, z, h):
         """
         :param z: An float tensor with shape of [batch_size, z_size]
         :param h: An float tensor with shape of [batch_size, h_size]
-        :return: An float tensor with shape of [batch_size, z_size] and log det value of jacobian of the IAF mapping
+        :return: An float tensor with shape of [batch_size, z_size] and log det value of the IAF mapping Jacobian
         """
 
         h = self.h(h)
